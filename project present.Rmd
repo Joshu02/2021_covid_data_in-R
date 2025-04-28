@@ -1,0 +1,334 @@
+---
+title: "Covid-19-Project"
+author: "Josue Manishimwe"
+date: "2025-03-16"
+output: html_document
+---
+
+
+
+# Project Description
+
+The COVID-19 pandemic dramatically impacted global health systems, economies, and daily life. This project aims to analyze how various factors, such as case numbers, mortality rates, vaccination rates, and policy interventions, as the result of COVID-19 outcomes in different regions. The goal is to explore predictive insights into factors that influenced the outbreaks and understand which characteristics played a big role in determining the best solution to the incident.
+
+Through machine learning, this project will develop models to predict case fatality rates and assess the effectiveness of policy measures like lockdowns and vaccination campaigns. By applying some R-programming skills alongside the data, we aim 
+
+### Packages to install
+
+The following are the packages I used in this project: tidyverse (which includes dplyr, ggplot2, and tidyr) for data manipulation and visualization, and lubridate for handling date formats. I also used factoextra to visualize the clustering results. 
+
+```{r}
+install.packages("lubridate")
+install.packages("ggplot2")
+install.packages("plyr")
+install.packages("GGally")
+install.packages("dplyr") 
+install.packages("tidyverse")
+
+library("lubridate")
+library("dplyr")
+library("ggplot2")
+library("tidyverse")
+library(tibble)
+
+```
+
+
+
+## Covid-19 Dataset Loading
+```{r}
+getwd()
+data <- read.csv("~/Documents/R Programming for Data Science/datasets/covid-19/covid_19_data_cleaned.csv")
+head(data)
+```
+
+```{r}
+# data structure before cleaning
+str(data)
+```
+
+##### Deep Cleaning of Data
+
+```{r}
+# adding date and time instead of considering as characters
+data$Date <- mdy(trimws(data$Date))
+data
+```
+
+```{r}
+str(data)
+```
+
+```{r}
+# grouping countries together 
+data <- ddply(data, .(Date, Country), numcolwise(sum))
+head(data)
+```
+
+```{r}
+str(data)
+```
+
+```{r}
+# Removing the Lat & Long because we have the colwise sum and these two can not be sum together
+data <- within(data, rm(Lat, Long))
+```
+```{r}
+str(data)
+```
+The data was already fairly clean, so I only made a few adjustments. I changed the date format, deleted a few unnecessary columns, did some grouping... 
+
+##### Displaying the data
+
+```{r}
+# US data display 
+us <- subset(data, trimws(Country) == "US") 
+us
+```
+
+```{r}
+latest <- subset(data, Date==max(Date)-3)
+```
+
+
+```{r}
+# Top 10 countries with the highest number of covid. 
+latest <- data[order(data$Confirmed, decreasing = TRUE),]
+#latest[order(latest$Confirmed, decreasing = TRUE)]
+```
+
+```{r}
+top10 <- latest[1:10,]
+```
+
+```{r}
+rownames(top10) <- 1:10
+```
+
+```{r}
+top10
+```
+## CLeaning description
+
+
+
+### Line Chart – Daily Cases Over Time
+
+```{r}
+ggplot(data, aes(x = Date, y = Confirmed, color = Country)) +
+  geom_line() +
+  labs(title = "Daily Confirmed Cases by Country")
+```
+
+### Bar Plot || Top 10 Countries with a very high
+
+```{r}
+ggp <- ggplot(top10, aes(x=Country, y=Confirmed))
+ggp + geom_col(color= "red", fill="blue")
+```
+
+
+```{r}
+ggp <- ggplot(top10, aes(x = reorder(Country, Confirmed), y = Confirmed))
+ggp + geom_col(color = "red", fill = "blue") + 
+  labs(title = "Top 10 Worst Hit Covid Countries by Covid-19", subtitle = "Covid-19 dataser worldwide")
+```
+
+### Pie Chart – Proportion of Global Cases
+
+```{r}
+global <- data %>%
+  group_by(Country) %>%
+  summarize(Total = sum(Confirmed, na.rm = TRUE)) %>%
+  top_n(10, Total)
+
+ggplot(global, aes(x = "", y = Total, fill = Country)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  labs(title = "Top 10 Countries - COVID Case Share")
+
+```
+
+
+
+```{r}
+#latest
+ggp <- ggplot(latest, aes(x = Country, y=Confirmed))
+ggp + geom_point(size=2, color="blue")
+```
+
+```{r}
+cumulative <- data %>%
+  group_by(Country, Date) %>%
+  summarize(CumulativeConfirmed = sum(Confirmed, na.rm = TRUE)) %>%
+  group_by(Country) %>%
+  mutate(CumulativeConfirmed = cumsum(CumulativeConfirmed))
+
+ggplot(cumulative, aes(x = Date, y = CumulativeConfirmed, color = Country)) +
+  geom_line() +
+  labs(title = "Cumulative Confirmed Cases Over Time")
+
+
+```
+
+### Selecting Columns Starting with "New" or "D"
+```{r}
+subset <- select(data, starts_with(c("New", "D", "C", "A")))
+subset
+```
+### Scatter Plot Between confirmed and death
+```{r}
+ggplot(subset, aes(x = Confirmed, y = Deaths)) +
+  geom_point(color = "red", alpha = 0.6) +
+  labs(title = "Deaths vs Confirmed Cases", x = "Confirmed Cases", y = "Deaths")
+
+```
+
+### Total COVID Metrics Across All Observations
+
+```{r}
+# Keep only numeric columns
+numeric_subset <- subset %>% select(where(is.numeric))
+
+# Calculate total for each metric
+total_by_metric <- colSums(numeric_subset, na.rm = TRUE) %>%
+  enframe(name = "Metric", value = "Total")
+
+# Plot the bar chart
+ggplot(total_by_metric, aes(x = reorder(Metric, Total), y = Total)) +
+  geom_col(fill = "blue") +
+  coord_flip() +
+  labs(title = "Total Counts by Metric", x = "Metric", y = "Total")
+```
+This above, shows the total number for each COVID-related metric (like Confirmed, Deaths, and Active cases) across all the data. It then creates a bar chart to visually show and compare the overall totals for each metric.
+
+### Heatmap of Scaled COVID-19 Metrics
+
+```{r}
+# Filter numeric columns only
+numeric_subset <- subset %>% select(where(is.numeric))
+
+# Scale (normalize) the numeric data
+subset_scaled <- as.data.frame(scale(numeric_subset))
+
+# Add row number for plotting
+subset_scaled$Row <- 1:nrow(subset_scaled)
+
+# Convert to long format for heatmap
+subset_long <- pivot_longer(subset_scaled, -Row, names_to = "Metric", values_to = "Value")
+
+# Plot the heatmap
+ggplot(subset_long, aes(x = Metric, y = Row, fill = Value)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = "Heatmap of Scaled COVID Metrics", x = "Metric", y = "Observation")
+```
+From the above code, we can scale the COVID data to make all the metrics comparable, then reshapes it so it can be used to create a heatmap. The heatmap visually shows how each observation (row) compares across different COVID-19 metrics using color intensity.
+### Comparison of Confirmed, Deaths, and Active COVID-19 Cases
+
+```{r}
+# Select the relevant columns
+plot_data <- subset %>%
+  select(Confirmed, Deaths, Active)
+
+# Add a row ID or label if not already present
+plot_data$Observation <- paste0("Obs_", 1:nrow(plot_data))
+
+# Convert to long format for grouped bars
+plot_long <- pivot_longer(plot_data, cols = c(Confirmed, Deaths, Active),
+                          names_to = "Metric", values_to = "Value")
+
+# Plot
+ggplot(plot_long, aes(x = Observation, y = Value, fill = Metric)) +
+  geom_col(position = "dodge") +
+  labs(title = "Grouped Bar Chart: Confirmed, Deaths, and Active Cases",
+       x = "Observation",
+       y = "Cases") +
+  theme(axis.text.x = element_blank())  # hides x labels for clarity
+
+```
+The above shows the Confirmed, Deaths, and Active cases for each observation by arranging the data side-by-side. Also we creates a grouped bar chart to easily compare the three metrics across all observations.
+
+### Linear Regression: Predicting COVID-19 Deaths from Confirmed and Active Cases
+
+```{r}
+install.packages("caret")
+library(caret)
+
+# Ensure all inputs are numeric and clean
+model_data <- subset %>%
+  select(Deaths, Confirmed, Active) %>%
+  na.omit()
+
+# Fit linear model
+model <- lm(Deaths ~ Confirmed + Active, data = model_data)
+
+# Model summary
+summary(model)
+
+
+```
+
+```{r}
+# Predict and compare with actual
+model_data$Predicted_Deaths <- predict(model, model_data)
+
+# Plot actual vs predicted
+ggplot(model_data, aes(x = Deaths, y = Predicted_Deaths)) +
+  geom_point(color = "blue") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  labs(title = "Actual vs Predicted Deaths",
+       x = "Actual Deaths", y = "Predicted Deaths")
+```
+The above explains how a linear regression model was used to predict the number of Deaths based on Confirmed and Active cases. It also compares the model's predicted values against the actual data with a scatter plot for better visualization.
+
+The model shows a very strong relationship, with a high R-squared value of 0.90, meaning it explains about 90% of the variation in Deaths. Both Confirmed and Active cases are statistically significant predictors, with very small p-values indicating strong evidence against the null hypothesis.
+
+
+
+```{r}
+install.packages("factoextra")
+library(factoextra)
+
+
+# Use only numeric, relevant features
+cluster_data <- subset %>%
+  select(Confirmed, Deaths, Active) %>%
+  na.omit() %>%
+  scale()  # Normalize for better clustering
+
+# Determine optimal number of clusters
+fviz_nbclust(cluster_data, kmeans, method = "wss")
+
+# Fit K-means with k = 3 (or your choice based on the plot above)
+set.seed(42)
+kmodel <- kmeans(cluster_data, centers = 3, nstart = 25)
+
+# Add cluster labels to original data
+clustered <- as.data.frame(cluster_data)
+clustered$Cluster <- as.factor(kmodel$cluster)
+summary(clustered)
+
+```
+```{r}
+# Visualize clusters (2D projection)
+fviz_cluster(kmodel, data = cluster_data,
+             geom = "point", ellipse.type = "norm",
+             palette = "jco", ggtheme = theme_minimal())
+```
+
+The above shows how K-means clustering was used to group the observations based on their Confirmed, Deaths, and Active cases after scaling the data. It also visualizes the different clusters to better understand how similar or different the observations are from each other.
+
+The clustering mainly placed most observations into Cluster 3, while only a few observations fell into Clusters 1 and 2. The scaled values of Confirmed, Deaths, and Active cases are centered around zero, showing that the data was properly normalized before clustering.
+
+
+
+
+
+
+
+
+
+
+
+
